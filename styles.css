@@ -2180,9 +2180,7 @@ body:not(:has(#menu)) #status_bar {
 }
 
 #tm-accent-popup {
-    position: absolute !important;
-    top: calc(100% + 8px) !important;
-    right: 0 !important;
+    position: fixed !important;
     background: var(--d-bg-3) !important;
     border: 1px solid var(--d-border) !important;
     border-radius: var(--d-radius) !important;
@@ -2191,6 +2189,7 @@ body:not(:has(#menu)) #status_bar {
     gap: 10px !important;
     z-index: 10000 !important;
     box-shadow: var(--d-shadow-lg) !important;
+    width: max-content !important;
 }
 
 #tm-accent-popup.tm-open {
@@ -2240,4 +2239,72 @@ body:not(:has(#menu)) #status_bar {
     background: var(--d-bg-4) !important;
     border-color: var(--d-border-2) !important;
     color: var(--d-text) !important;
+}
+
+/* ===========================================================
+ *  Игровой оверлей — Кликер
+ * =========================================================== */
+#tm-game-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(10,10,12,.85) !important;
+    z-index: 10000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    backdrop-filter: blur(4px) !important;
+    animation: tm-fadein .2s ease both !important;
+}
+#tm-game-frame {
+    width: 560px !important;
+    height: 700px !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    border: 1px solid var(--d-border) !important;
+    border-radius: var(--d-radius) !important;
+    background: var(--d-bg-0) !important;
+    box-shadow: var(--d-shadow-lg) !important;
+}
+#tm-game-close {
+    position: fixed !important;
+    top: 20px !important;
+    right: 28px !important;
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important;
+    background: var(--d-bg-3) !important;
+    border: 1px solid var(--d-border-2) !important;
+    color: var(--d-text-dim) !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 10001 !important;
+    transition: background .15s ease, color .15s ease !important;
+    font-family: system-ui, sans-serif !important;
+}
+#tm-game-close:hover {
+    background: var(--d-bg-4) !important;
+    color: var(--d-accent) !important;
+    border-color: var(--d-accent-dim) !important;
+}
+
+/* Пункт меню «Кликер» */
+#menu_item li.tm-game-item a {
+    color: var(--d-accent-soft) !important;
+}
+#menu_item li.tm-game-item a:hover {
+    color: var(--d-accent) !important;
+}
+#menu_item li.tm-game-item a .menu_icon {
+    color: var(--d-accent-dim) !important;
+}
+#menu_item li.tm-game-item:hover a .menu_icon {
+    color: var(--d-accent) !important;
 }

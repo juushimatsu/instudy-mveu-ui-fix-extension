@@ -298,10 +298,12 @@
         const btn = document.getElementById('tm-theme-toggle');
         if (btn) btn.textContent = theme === 'dark' ? '\u{1F319}' : '\u{2600}\u{FE0F}';
         applyAccent(localStorage.getItem('tm-accent') || 'mono');
+        syncGameTheme();
     }
 
     function injectThemeToggle() {
         try {
+            if (document.getElementById('tm-theme-toggle')) return;
             const bar = document.getElementById('status_bar');
             if (!bar) return;
             const avatar = bar.querySelector('.top-avatar');
@@ -471,6 +473,7 @@
 
     function injectWeatherToggle() {
         try {
+            if (document.getElementById('tm-weather-toggle')) return;
             var bar = document.getElementById('status_bar');
             if (!bar) return;
             var themeBtn = document.getElementById('tm-theme-toggle');
@@ -881,6 +884,7 @@
             }
             style.textContent = css;
             localStorage.setItem('tm-accent', name || 'mono');
+            syncGameTheme();
         } catch (_) { /* noop */ }
     }
 
@@ -925,6 +929,9 @@
 
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
+                var rect = btn.getBoundingClientRect();
+                popup.style.top = (rect.bottom + 8) + 'px';
+                popup.style.left = Math.max(8, rect.left - 10) + 'px';
                 popup.classList.toggle('tm-open');
             });
             document.addEventListener('click', function () {
@@ -933,10 +940,8 @@
 
             var wrapper = document.createElement('div');
             wrapper.id = 'tm-accent-wrapper';
-            wrapper.style.position = 'relative';
             wrapper.style.display = 'inline-flex';
             wrapper.appendChild(btn);
-            wrapper.appendChild(popup);
 
             var avatar = bar.querySelector('.top-avatar');
             var weatherBtn = document.getElementById('tm-weather-toggle');
@@ -947,6 +952,7 @@
             } else {
                 bar.appendChild(wrapper);
             }
+            document.body.appendChild(popup);
         } catch (_) { /* noop */ }
     }
 
@@ -1035,6 +1041,107 @@
         }
     })();
 
+    /* -----------------------------------------------------------
+     *  Пункт меню «Кликер» + игровой оверлей
+     * ----------------------------------------------------------- */
+    function injectGameMenuItem() {
+        try {
+            var menu = document.getElementById('menu_item');
+            if (!menu) return;
+            if (document.getElementById('tm-game-menu-item')) return;
+
+            var li = document.createElement('li');
+            li.id = 'tm-game-menu-item';
+            li.className = 'tm-game-item';
+
+            var a = document.createElement('a');
+            a.href = '#';
+            a.title = 'Кликер «Студент»';
+            a.innerHTML = '<span class="menu_icon">🎮</span><b>Кликер</b>';
+
+            a.addEventListener('click', function (e) {
+                e.preventDefault();
+                openGameOverlay();
+            });
+
+            li.appendChild(a);
+
+            // Вставляем в конец меню или после последнего пункта
+            menu.appendChild(li);
+        } catch (_) { /* noop */ }
+    }
+
+    function openGameOverlay() {
+        try {
+            if (document.getElementById('tm-game-overlay')) return;
+
+            var overlay = document.createElement('div');
+            overlay.id = 'tm-game-overlay';
+
+            var frame = document.createElement('iframe');
+            frame.id = 'tm-game-frame';
+            frame.src = chrome.runtime.getURL('game/game.html');
+            frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+
+            var closeBtn = document.createElement('button');
+            closeBtn.id = 'tm-game-close';
+            closeBtn.title = 'Закрыть';
+            closeBtn.innerHTML = '\u00D7';
+            closeBtn.addEventListener('click', closeGameOverlay);
+
+            overlay.appendChild(frame);
+            document.body.appendChild(overlay);
+            document.body.appendChild(closeBtn);
+
+            frame.addEventListener('load', syncGameTheme);
+
+            // Закрытие по Escape
+            document.addEventListener('keydown', onEscClose);
+        } catch (_) { /* noop */ }
+    }
+
+    function closeGameOverlay() {
+        try {
+            var overlay = document.getElementById('tm-game-overlay');
+            var closeBtn = document.getElementById('tm-game-close');
+            if (overlay) overlay.remove();
+            if (closeBtn) closeBtn.remove();
+            document.removeEventListener('keydown', onEscClose);
+        } catch (_) { /* noop */ }
+    }
+
+    function onEscClose(e) {
+        if (e.key === 'Escape') closeGameOverlay();
+    }
+
+    function syncGameTheme() {
+        try {
+            var frame = document.getElementById('tm-game-frame');
+            if (!frame || !frame.contentWindow) return;
+            var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+            var accent = localStorage.getItem('tm-accent') || 'mono';
+            var msg = { type: 'theme', theme: theme, accent: accent };
+            frame.contentWindow.postMessage(msg, '*');
+            // Иногда iframe ещё не готов к приёму — повторяем через небольшую задержку
+            setTimeout(function () {
+                try {
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.postMessage(msg, '*');
+                    }
+                } catch (_) { /* noop */ }
+            }, 50);
+        } catch (_) { /* noop */ }
+    }
+
+    function ensureToolbarButtons() {
+        try {
+            injectThemeToggle();
+            injectWeatherToggle();
+            injectAccentPicker();
+            injectDensityToggle();
+        } catch (_) { /* noop */ }
+    }
+
     onReady(() => {
         applyTheme(getCurrentTheme());
         disableColorTheme();
@@ -1043,8 +1150,8 @@
         fixBrokenAvatars(document);
         virtualGulist();
         markMyMessages();
-        injectThemeToggle();
-        injectWeatherToggle();
+        ensureToolbarButtons();
+        injectGameMenuItem();
         applyWeather(getCurrentWeather());
         injectScrollTop();
         watchNewMessages();
@@ -1066,6 +1173,7 @@
                 virtualGulist();
                 markMyMessages();
                 inlineChatImages();
+                ensureToolbarButtons();
             }
             const observer = new MutationObserver((mutations) => {
                 var hasNew = false;

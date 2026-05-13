@@ -26,6 +26,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "web_accessible_resources": ["game/*", "icons/*"],
   "browser_specific_settings": {
     "gecko": {
       "id": "{ceea37ac-9100-4ef2-9092-87117ddba6cd}",
