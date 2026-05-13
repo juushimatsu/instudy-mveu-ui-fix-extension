@@ -27,12 +27,13 @@
     "128": "icons/icon128.png"
   },
   "browser_specific_settings": {
-  "gecko": {
-    "id": "{ceea37ac-9100-4ef2-9092-87117ddba6cd}"
+    "gecko": {
+      "id": "{ceea37ac-9100-4ef2-9092-87117ddba6cd}"
+    }
   },
   "data_collection_permissions": {
     "required": [],
     "optional": []
   }
 }
-}
+
