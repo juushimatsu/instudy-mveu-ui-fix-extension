@@ -41,8 +41,17 @@
     UPGRADES.forEach(function (u) { state.upgrades[u.id] = 0; });
 
     var lastSave = Date.now();
-    var saveInterval = null;
     var tickInterval = null;
+
+    /* ── События ── */
+    var gameState = 'idle'; // idle | exam | lab | virus
+    var eventTimer = null;
+    var eventCountdown = null;
+    var examClicks = 0;
+    var labClicks = 0;
+    var examBuffEnd = 0;      // +1 к клику на 60с
+    var virusPenaltyEnd = 0;  // КПС ×0.5 на 20с
+    var labSpinEnd = 0;       // кнопка крутится 10с
 
     /* ──────────────────────────────────────────────────────────
      *  DOM
@@ -57,6 +66,19 @@
     var levelNameEl = document.getElementById('level-name');
     var levelProgressEl = document.getElementById('level-progress');
     var levelFillEl = document.getElementById('level-fill');
+
+    /* Оверлеи */
+    var examOverlay = document.getElementById('exam-overlay');
+    var examBtn = document.getElementById('exam-btn');
+    var examTimer = document.getElementById('exam-timer');
+    var examScore = document.getElementById('exam-score');
+    var labOverlay = document.getElementById('lab-overlay');
+    var labTarget = document.getElementById('lab-target');
+    var labTimer = document.getElementById('lab-timer');
+    var labScore = document.getElementById('lab-score');
+    var virusOverlay = document.getElementById('virus-overlay');
+    var virusBanner = document.getElementById('virus-banner');
+    var virusClose = document.getElementById('virus-close');
 
     /* ──────────────────────────────────────────────────────────
      *  УТИЛИТЫ
@@ -79,6 +101,7 @@
         UPGRADES.forEach(function (u) {
             if (u.clickBonus) base += u.clickBonus * (state.upgrades[u.id] || 0);
         });
+        if (Date.now() < examBuffEnd) base += 1;
         return base;
     }
 
@@ -87,6 +110,7 @@
         UPGRADES.forEach(function (u) {
             if (u.kps) kps += u.kps * (state.upgrades[u.id] || 0);
         });
+        if (Date.now() < virusPenaltyEnd) kps *= 0.5;
         return kps;
     }
 
@@ -254,6 +278,7 @@
      *  КЛИК
      * ────────────────────────────────────────────────────────── */
     function onClick(e) {
+        if (gameState !== 'idle') return; // нельзя кликать во время событий
         var val = getClickValue();
         state.knowledge += val;
         state.totalKnowledge += val;
@@ -262,7 +287,6 @@
         renderStats();
         renderUpgrades();
 
-        // Визуальный эффект
         var rect = btnEl.getBoundingClientRect();
         var x = rect.left + rect.width / 2 + (Math.random() * 60 - 30);
         var y = rect.top + rect.height / 2 - 20;
@@ -297,6 +321,11 @@
      *  ПАССИВНЫЙ ДОХОД
      * ────────────────────────────────────────────────────────── */
     function tick() {
+        if (gameState !== 'idle') {
+            // Во время событий пассивный доход приостанавливается
+            if (Date.now() - lastSave > 5000) saveGame();
+            return;
+        }
         var kps = getKPS();
         if (kps > 0) {
             var gain = kps * 0.1;
@@ -308,6 +337,187 @@
         if (Date.now() - lastSave > 5000) saveGame();
     }
 
+    /* ══════════════════════════════════════════════════════════
+     *  СОБЫТИЯ
+     * ══════════════════════════════════════════════════════════ */
+    function scheduleEvent() {
+        if (gameState !== 'idle') return;
+        var delay = 15000 + Math.random() * 30000; // 15–45 сек
+        eventTimer = setTimeout(function () {
+            if (gameState !== 'idle') return;
+            var roll = Math.random();
+            if (roll < 0.33) startExam();
+            else if (roll < 0.66) startLab();
+            else startVirus();
+        }, delay);
+    }
+
+    function clearEventTimer() {
+        if (eventTimer) { clearTimeout(eventTimer); eventTimer = null; }
+        if (eventCountdown) { clearInterval(eventCountdown); eventCountdown = null; }
+    }
+
+    /* ── Экзамен ── */
+    function startExam() {
+        gameState = 'exam';
+        examClicks = 0;
+        examTimer.textContent = '5.0';
+        examScore.textContent = '0 кликов';
+        examBtn.classList.remove('shake');
+        examOverlay.style.display = 'flex';
+
+        var timeLeft = 5.0;
+        eventCountdown = setInterval(function () {
+            timeLeft -= 0.1;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                clearInterval(eventCountdown);
+                endExam();
+            }
+            examTimer.textContent = timeLeft.toFixed(1);
+        }, 100);
+    }
+
+    function endExam() {
+        examOverlay.style.display = 'none';
+        if (examClicks >= 15) {
+            examBuffEnd = Date.now() + 60000;
+            state.knowledge += 50;
+            state.totalKnowledge += 50;
+            showToast('Экзамен сдан! +50 знаний, +1/клик на 60с');
+        } else {
+            var loss = state.knowledge * 0.20;
+            state.knowledge = Math.max(0, state.knowledge - loss);
+            examBtn.classList.add('shake');
+            showToast('Экзамен провален! −20% знаний');
+        }
+        gameState = 'idle';
+        renderStats();
+        scheduleEvent();
+    }
+
+    examBtn.addEventListener('click', function (e) {
+        if (gameState !== 'exam') return;
+        e.stopPropagation();
+        examClicks += 1;
+        examScore.textContent = examClicks + ' кликов';
+        // Визуальный отклик
+        examBtn.style.transform = 'scale(0.88)';
+        setTimeout(function () { examBtn.style.transform = ''; }, 80);
+    });
+
+    /* ── Лабораторная ── */
+    function moveLabTarget() {
+        if (gameState !== 'lab') return;
+        var panel = labTarget.parentElement;
+        var pw = panel.clientWidth;
+        var ph = panel.clientHeight;
+        var tw = labTarget.offsetWidth;
+        var th = labTarget.offsetHeight;
+        var maxX = pw - tw - 20;
+        var maxY = ph - th - 20;
+        labTarget.style.left = (10 + Math.random() * maxX) + 'px';
+        labTarget.style.top = (10 + Math.random() * maxY) + 'px';
+    }
+
+    function startLab() {
+        gameState = 'lab';
+        labClicks = 0;
+        labTimer.textContent = '7.0';
+        labScore.textContent = '0/8';
+        labTarget.classList.remove('spin');
+        labTarget.style.left = '50%';
+        labTarget.style.top = '50%';
+        labTarget.style.transform = 'translate(-50%,-50%)';
+        labOverlay.style.display = 'flex';
+
+        moveLabTarget();
+        var moveTimer = setInterval(function () {
+            if (gameState !== 'lab') { clearInterval(moveTimer); return; }
+            moveLabTarget();
+        }, 600);
+
+        var timeLeft = 7.0;
+        eventCountdown = setInterval(function () {
+            timeLeft -= 0.1;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                clearInterval(eventCountdown);
+                clearInterval(moveTimer);
+                endLab();
+            }
+            labTimer.textContent = timeLeft.toFixed(1);
+        }, 100);
+    }
+
+    function endLab() {
+        labOverlay.style.display = 'none';
+        if (labClicks >= 8) {
+            state.knowledge += 50;
+            state.totalKnowledge += 50;
+            showToast('Лаба сдана! +50 знаний, +0.5 КПС на 60с');
+        } else {
+            var loss = state.knowledge * 0.15;
+            state.knowledge = Math.max(0, state.knowledge - loss);
+            labSpinEnd = Date.now() + 10000;
+            showToast('Лаба провалена! −15% знаний, кнопка крутится');
+        }
+        gameState = 'idle';
+        renderStats();
+        scheduleEvent();
+    }
+
+    labTarget.addEventListener('click', function (e) {
+        if (gameState !== 'lab') return;
+        e.stopPropagation();
+        labClicks += 1;
+        labScore.textContent = labClicks + '/8';
+        moveLabTarget();
+    });
+
+    /* ── Вирусный баннер ── */
+    function startVirus() {
+        gameState = 'virus';
+        var gx = 10 + Math.random() * 50;
+        var gy = 10 + Math.random() * 40;
+        virusBanner.style.left = gx + '%';
+        virusBanner.style.top = gy + '%';
+        virusBanner.style.transform = 'translate(-50%, -50%)';
+        virusOverlay.style.display = 'flex';
+
+        var timeLeft = 2.0;
+        eventCountdown = setInterval(function () {
+            timeLeft -= 0.1;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                clearInterval(eventCountdown);
+                endVirus(false);
+            }
+        }, 100);
+    }
+
+    function endVirus(success) {
+        virusOverlay.style.display = 'none';
+        if (success) {
+            state.knowledge += 30;
+            state.totalKnowledge += 30;
+            showToast('Баннер закрыт! +30 знаний');
+        } else {
+            virusPenaltyEnd = Date.now() + 20000;
+            showToast('Вирус! КПС −50% на 20 секунд');
+        }
+        gameState = 'idle';
+        renderStats();
+        scheduleEvent();
+    }
+
+    virusClose.addEventListener('click', function (e) {
+        if (gameState !== 'virus') return;
+        e.stopPropagation();
+        clearInterval(eventCountdown);
+        endVirus(true);
+    });
+
     /* ──────────────────────────────────────────────────────────
      *  ИНИЦИАЛИЗАЦИЯ
      * ────────────────────────────────────────────────────────── */
@@ -318,6 +528,7 @@
             btnEl.addEventListener('click', onClick);
             tickInterval = setInterval(tick, 100);
             window.addEventListener('beforeunload', saveGame);
+            scheduleEvent();
         });
     }
 
