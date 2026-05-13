@@ -53,6 +53,18 @@
     var virusPenaltyEnd = 0;  // КПС ×0.5 на 20с
     var labSpinEnd = 0;       // кнопка крутится 10с
 
+    /* ── Онлайн / API ── */
+    var apiEnabled = false;
+    var apiToken = null;
+    var syncTimer = null;
+    var heartbeatTimer = null;
+    var leaderboardTimer = null;
+    var onlineTimer = null;
+    var lastServerSync = 0;
+    var currentLeaderboard = [];
+    var currentOnline = [];
+    var pendingOfflineIncome = 0;
+
     /* ──────────────────────────────────────────────────────────
      *  DOM
      * ────────────────────────────────────────────────────────── */
@@ -180,7 +192,10 @@
                         state.upgrades[key] = data.upgrades[key];
                     });
                 }
-                if (offlineGain > 0) showToast('Оффлайн доход: +' + formatNumber(offlineGain));
+                if (offlineGain > 0) {
+                    pendingOfflineIncome = offlineGain;
+                    showToast('Оффлайн доход: +' + formatNumber(offlineGain));
+                }
             }
             if (callback) callback();
         };
@@ -519,6 +534,253 @@
     });
 
     /* ──────────────────────────────────────────────────────────
+     *  ОНЛАЙН ФУНКЦИИ (API)
+     * ────────────────────────────────────────────────────────── */
+    function tryAuth() {
+        // Пытаемся получить токен из storage
+        function checkStorage(done) {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.get(['instudy_api_token', 'instudy_auth_data'], function (res) {
+                    done(res.instudy_api_token, res.instudy_auth_data);
+                });
+            } else {
+                done(localStorage.getItem('instudy_api_token'), null);
+            }
+        }
+        checkStorage(function (token, auth) {
+            if (token) {
+                apiToken = token;
+                apiEnabled = true;
+                // Загружаем состояние с сервера, чтобы избежать 403 при сбросе локальных данных
+                if (window.ClickerAPI) {
+                    window.ClickerAPI.getMe(function (err2, me) {
+                        if (!err2 && me && me.success && me.user && me.user.score) {
+                            var s = me.user.score;
+                            state.knowledge = s.knowledge || 0;
+                            state.totalKnowledge = s.total_knowledge || 0;
+                            state.clickCount = s.click_count || 0;
+                            state.upgrades = s.upgrades || {};
+                            renderStats();
+                            renderUpgrades();
+                        }
+                        startOnlineFeatures();
+                    });
+                } else {
+                    startOnlineFeatures();
+                }
+                return;
+            }
+            // Если токена нет, но есть auth данные — авторизуемся
+            if (!auth) {
+                // Запрашиваем у content.js
+                window.parent.postMessage({ type: 'request-instudy-auth' }, '*');
+                // Повторная попытка через 2 сек
+                setTimeout(tryAuth, 2000);
+                return;
+            }
+            if (window.ClickerAPI) {
+                window.ClickerAPI.auth(auth.instudy_user_id, auth.username, function (err, data) {
+                    if (!err && data && data.success) {
+                        apiToken = data.token;
+                        apiEnabled = true;
+                        // Загружаем состояние с сервера (если есть) чтобы избежать 403
+                        window.ClickerAPI.getMe(function (err2, me) {
+                            if (!err2 && me && me.success && me.user && me.user.score) {
+                                var s = me.user.score;
+                                state.knowledge = s.knowledge || 0;
+                                state.totalKnowledge = s.total_knowledge || 0;
+                                state.clickCount = s.click_count || 0;
+                                state.upgrades = s.upgrades || {};
+                                renderStats();
+                                renderUpgrades();
+                            }
+                            startOnlineFeatures();
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    function startOnlineFeatures() {
+        if (!apiEnabled) return;
+        createOnlineUI();
+        syncToServer();
+        sendHeartbeat();
+        loadLeaderboard();
+        loadOnline();
+        // Синхронизация каждые 30 сек
+        syncTimer = setInterval(syncToServer, 30000);
+        // Heartbeat каждые 30 сек
+        heartbeatTimer = setInterval(sendHeartbeat, 30000);
+        // Обновление рейтинга каждые 60 сек
+        leaderboardTimer = setInterval(loadLeaderboard, 60000);
+        // Обновление онлайна каждые 30 сек
+        onlineTimer = setInterval(loadOnline, 30000);
+    }
+
+    function syncToServer() {
+        if (!apiEnabled || !window.ClickerAPI) return;
+        window.ClickerAPI.sync(state, pendingOfflineIncome, function (err, data) {
+            if (!err && data && data.success) {
+                lastServerSync = Date.now();
+                pendingOfflineIncome = 0; // сбрасываем после успешной синхронизации
+                updateSyncStatus('Синхронизировано');
+            } else if (data && data.anticheat) {
+                updateSyncStatus('Подозрительная активность', true);
+            } else {
+                updateSyncStatus('Ошибка синхронизации', true);
+            }
+        });
+    }
+
+    function sendHeartbeat() {
+        if (!apiEnabled || !window.ClickerAPI) return;
+        window.ClickerAPI.heartbeat(function () { /* noop */ });
+    }
+
+    function loadLeaderboard() {
+        if (!apiEnabled || !window.ClickerAPI) return;
+        window.ClickerAPI.getLeaderboard('all', 20, function (err, data) {
+            if (!err && data && data.success && data.leaderboard) {
+                currentLeaderboard = data.leaderboard;
+                renderLeaderboard();
+            }
+        });
+    }
+
+    function loadOnline() {
+        if (!apiEnabled || !window.ClickerAPI) return;
+        window.ClickerAPI.getOnline(function (err, data) {
+            if (!err && data && data.success && data.users) {
+                currentOnline = data.users;
+                renderOnline();
+            }
+        });
+    }
+
+    function updateSyncStatus(text, isError) {
+        var el = document.getElementById('sync-status');
+        if (!el) return;
+        el.textContent = text;
+        el.style.color = isError ? '#c25f5f' : 'var(--text-muted)';
+    }
+
+    function createOnlineUI() {
+        var header = document.querySelector('.game-header');
+        if (!header || document.getElementById('lb-btn')) return;
+
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:6px;margin-left:auto;align-items:center;';
+
+        var lbBtn = document.createElement('button');
+        lbBtn.id = 'lb-btn';
+        lbBtn.textContent = '🏆';
+        lbBtn.title = 'Рейтинг';
+        lbBtn.className = 'tm-game-tab-btn';
+        lbBtn.onclick = function () { showPanel('leaderboard'); };
+
+        var onBtn = document.createElement('button');
+        onBtn.id = 'on-btn';
+        onBtn.textContent = '🌐';
+        onBtn.title = 'Онлайн';
+        onBtn.className = 'tm-game-tab-btn';
+        onBtn.onclick = function () { showPanel('online'); };
+
+        var syncStatus = document.createElement('span');
+        syncStatus.id = 'sync-status';
+        syncStatus.style.cssText = 'font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-left:4px;white-space:nowrap;';
+        syncStatus.textContent = 'Синхронизация...';
+
+        wrap.appendChild(lbBtn);
+        wrap.appendChild(onBtn);
+        wrap.appendChild(syncStatus);
+        header.appendChild(wrap);
+
+        // Стили кнопок вкладок
+        var style = document.createElement('style');
+        style.textContent = '.tm-game-tab-btn{background:var(--bg-3);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;font-size:14px;cursor:pointer;color:var(--text-dim);display:inline-flex;align-items:center;justify-content:center;transition:all .15s ease;}' +
+            '.tm-game-tab-btn:hover{border-color:var(--accent-dim);color:var(--accent);}' +
+            '.tm-game-tab-btn.active{background:var(--bg-4);border-color:var(--accent-dim);color:var(--accent);}' +
+            '.tm-online-panel{position:absolute;top:0;left:0;width:100%;height:100%;background:var(--bg-1);z-index:100;display:none;flex-direction:column;padding:14px 16px;overflow:hidden;}' +
+            '.tm-online-panel.show{display:flex;}' +
+            '.tm-panel-title{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;}' +
+            '.tm-panel-close{position:absolute;top:10px;right:12px;background:transparent;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;}' +
+            '.tm-panel-close:hover{background:var(--bg-3);color:var(--accent);}' +
+            '.tm-lb-row{display:flex;align-items:center;gap:10px;padding:6px 4px;border-radius:6px;font-family:var(--font-mono);font-size:12px;}' +
+            '.tm-lb-row:hover{background:var(--bg-2);}' +
+            '.tm-lb-rank{width:24px;text-align:center;color:var(--accent-soft);font-weight:600;}' +
+            '.tm-lb-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}' +
+            '.tm-lb-score{color:var(--accent-soft);font-weight:600;}' +
+            '.tm-on-row{display:flex;align-items:center;gap:8px;padding:5px 4px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);}' +
+            '.tm-on-dot{width:8px;height:8px;border-radius:50%;background:#5a9e6f;flex-shrink:0;}' +
+            '.tm-on-name{color:var(--text);}';
+        document.head.appendChild(style);
+
+        // Панель рейтинга
+        var lbPanel = document.createElement('div');
+        lbPanel.id = 'panel-leaderboard';
+        lbPanel.className = 'tm-online-panel';
+        lbPanel.innerHTML = '<div class="tm-panel-title">🏆 Рейтинг</div><button class="tm-panel-close">×</button><div id="lb-list" style="overflow-y:auto;flex:1;"></div>';
+        lbPanel.querySelector('.tm-panel-close').onclick = function () { hidePanels(); };
+        document.querySelector('.game-wrapper').appendChild(lbPanel);
+
+        // Панель онлайн
+        var onPanel = document.createElement('div');
+        onPanel.id = 'panel-online';
+        onPanel.className = 'tm-online-panel';
+        onPanel.innerHTML = '<div class="tm-panel-title">🌐 В сети (<span id="online-count">0</span>)</div><button class="tm-panel-close">×</button><div id="on-list" style="overflow-y:auto;flex:1;"></div>';
+        onPanel.querySelector('.tm-panel-close').onclick = function () { hidePanels(); };
+        document.querySelector('.game-wrapper').appendChild(onPanel);
+    }
+
+    function showPanel(name) {
+        hidePanels();
+        var p = document.getElementById('panel-' + name);
+        if (p) p.classList.add('show');
+        document.getElementById('lb-btn').classList.toggle('active', name === 'leaderboard');
+        document.getElementById('on-btn').classList.toggle('active', name === 'online');
+        if (name === 'leaderboard') renderLeaderboard();
+        if (name === 'online') renderOnline();
+    }
+
+    function hidePanels() {
+        document.querySelectorAll('.tm-online-panel').forEach(function (p) { p.classList.remove('show'); });
+        document.getElementById('lb-btn').classList.remove('active');
+        document.getElementById('on-btn').classList.remove('active');
+    }
+
+    function renderLeaderboard() {
+        var list = document.getElementById('lb-list');
+        if (!list) return;
+        if (!currentLeaderboard.length) {
+            list.innerHTML = '<div style="color:var(--text-muted);font-family:var(--font-mono);font-size:12px;text-align:center;padding-top:20px;">Загрузка...</div>';
+            return;
+        }
+        list.innerHTML = currentLeaderboard.map(function (r) {
+            return '<div class="tm-lb-row">' +
+                '<div class="tm-lb-rank">#' + r.rank + '</div>' +
+                '<div class="tm-lb-name">' + escapeHtml(r.username) + '</div>' +
+                '<div class="tm-lb-score">' + formatNumber(r.total_knowledge) + '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    function renderOnline() {
+        var list = document.getElementById('on-list');
+        var countEl = document.getElementById('online-count');
+        if (!list) return;
+        if (countEl) countEl.textContent = currentOnline.length;
+        if (!currentOnline.length) {
+            list.innerHTML = '<div style="color:var(--text-muted);font-family:var(--font-mono);font-size:12px;text-align:center;padding-top:20px;">Никого нет в сети</div>';
+            return;
+        }
+        list.innerHTML = currentOnline.map(function (u) {
+            return '<div class="tm-on-row"><div class="tm-on-dot"></div><div class="tm-on-name">' + escapeHtml(u.username) + '</div></div>';
+        }).join('');
+    }
+
+    /* ──────────────────────────────────────────────────────────
      *  ИНИЦИАЛИЗАЦИЯ
      * ────────────────────────────────────────────────────────── */
     function init() {
@@ -529,6 +791,7 @@
             tickInterval = setInterval(tick, 100);
             window.addEventListener('beforeunload', saveGame);
             scheduleEvent();
+            tryAuth(); // <-- онлайн-функции
         });
     }
 

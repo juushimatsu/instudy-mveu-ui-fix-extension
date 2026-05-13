@@ -1,0 +1,19 @@
+name = "instudy-clicker-api"
+main = "src/index.js"
+compatibility_date = "2024-05-13"
+
+# KV и D1 созданы и подключены
+
+[[kv_namespaces]]
+binding = "ONLINE_KV"
+id = "70f40f80b14a4c438fa9d2354ec818b0"
+preview_id = "b515555081d8491bb301eaa4f861f930"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "instudy-clicker-db"
+database_id = "810e55fa-9bcc-4dee-89c0-6d3068dadef1"
+preview_database_id = "810e55fa-9bcc-4dee-89c0-6d3068dadef1"
+
+# Секрет для подписи/валидации (задать через: wrangler secret put API_SECRET)
+# API_SECRET = "your-secret-key-here"

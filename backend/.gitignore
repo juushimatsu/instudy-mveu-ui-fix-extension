@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Wrangler secrets
+.env
+.env.local
+.dev.vars
+
+# Build output
+*.log
+dist/
+
+# OS
+.DS_Store
+Thumbs.db

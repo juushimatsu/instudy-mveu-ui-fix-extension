@@ -1,0 +1,21 @@
+name = "instudy-clicker-api"
+main = "src/index.js"
+compatibility_date = "2024-05-13"
+
+# ЗАМЕНИТЕ ID после создания через команды:
+# npx wrangler kv namespace create ONLINE_KV
+# npx wrangler d1 create instudy-clicker-db
+
+[[kv_namespaces]]
+binding = "ONLINE_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "instudy-clicker-db"
+database_id = "YOUR_D1_DATABASE_ID"
+preview_database_id = "YOUR_PREVIEW_D1_DATABASE_ID"
+
+# Секрет для подписи/валидации (задать через: wrangler secret put API_SECRET)
+# API_SECRET = "your-secret-key-here"

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Тёмная монохромная тема для портала disto.mveu.ru (InStudy)",
   "permissions": ["storage"],
-  "host_permissions": ["*://disto.mveu.ru/*"],
+  "host_permissions": ["*://disto.mveu.ru/*", "https://instudy-clicker-api.*.workers.dev/*"],
   "content_scripts": [
     {
       "matches": ["*://disto.mveu.ru/*"],

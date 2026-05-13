@@ -1142,6 +1142,248 @@
         } catch (_) { /* noop */ }
     }
 
+    /* -----------------------------------------------------------
+     *  Привязка аккаунта InStudy — извлечение user_id и auth
+     * ----------------------------------------------------------- */
+    function extractUserId() {
+        try {
+            // 1. Inline scripts (InStudy часто задаёт user_id в <script>)
+            var scripts = document.querySelectorAll('script:not([src])');
+            for (var s = 0; s < scripts.length; s++) {
+                var txt = scripts[s].textContent;
+                // Паттерны: user_id = 12345, userId:12345, id: '21965'
+                var m = txt.match(/user[_-]?id["']?\s*[:=]\s*["']?(\d+)/i);
+                if (m) return m[1];
+                // Паттерн: var u = 12345 (если рядом есть упоминание user)
+                var m2 = txt.match(/(?:user|пользователь|участник).*?(\d{4,})/i);
+                if (m2) return m2[1];
+            }
+
+            // 2. Cookies
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var c = cookies[i].trim();
+                if (/^(user_id|uid|id|userid)=/.test(c)) {
+                    return decodeURIComponent(c.split('=')[1]);
+                }
+            }
+
+            // 3. localStorage / sessionStorage
+            var lsKeys = ['user_id', 'uid', 'id', 'userid', 'userId'];
+            for (var j = 0; j < lsKeys.length; j++) {
+                var v = localStorage.getItem(lsKeys[j]) || sessionStorage.getItem(lsKeys[j]);
+                if (v) return v;
+            }
+
+            // 4. data-атрибуты на аватарке или шапке
+            var avatar = document.querySelector('.top-avatar img, .suser img');
+            if (avatar) {
+                var ds = avatar.getAttribute('data-user-id') || avatar.getAttribute('data-id');
+                if (ds) return ds;
+            }
+
+            // 5. Ссылки на профиль: /user/u21957, /u/21957, /profile/21965
+            var links = document.querySelectorAll('a[href*="/user/"], a[href*="/profile/"], a[href*="/u/"]');
+            for (var k = 0; k < links.length; k++) {
+                var href = links[k].getAttribute('href') || '';
+                var m3 = href.match(/\/(?:user|profile|u)\/u?(\d+)/);
+                if (m3) return m3[1];
+            }
+
+            // 6. Глобальные JS-переменные (популярные на LMS)
+            if (typeof window !== 'undefined') {
+                if (window.user_id) return String(window.user_id);
+                if (window.USER_ID) return String(window.USER_ID);
+                if (window.appData && window.appData.user && window.appData.user.id) return String(window.appData.user.id);
+            }
+        } catch (_) { /* noop */ }
+        return null;
+    }
+
+    function extractUsername() {
+        try {
+            var el = document.querySelector('.top-user-info b, .suser b, .user-name');
+            if (el) return el.textContent.trim();
+        } catch (_) { /* noop */ }
+        return 'Игрок';
+    }
+
+    function initAuth() {
+        try {
+            var uid = extractUserId();
+            var name = extractUsername();
+            if (!uid) {
+                // Повторная попытка через 3 сек (страница может догружаться)
+                setTimeout(initAuth, 3000);
+                return;
+            }
+            // Сохраняем в storage для игры
+            var authData = { instudy_user_id: uid, username: name, timestamp: Date.now() };
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({ 'instudy_auth_data': authData });
+            } else {
+                localStorage.setItem('instudy_auth_data', JSON.stringify(authData));
+            }
+            // Отправляем в игру если открыта
+            sendAuthToGame(authData);
+            // Авторизуемся на сервере через api-client внутри content (опционально — игра сама может)
+            // Но для надёжности сделаем здесь fetch
+                var apiBase = 'https://instudy-clicker-api.b8517280.workers.dev';
+            fetch(apiBase + '/api/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ instudy_user_id: uid, username: name })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data && data.success && data.token) {
+                    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                        chrome.storage.local.set({ 'instudy_api_token': data.token });
+                    } else {
+                        localStorage.setItem('instudy_api_token', data.token);
+                    }
+                }
+            })
+            .catch(function () { /* noop — игра сама попробует */ });
+        } catch (_) { /* noop */ }
+    }
+
+    function sendAuthToGame(data) {
+        try {
+            var frame = document.getElementById('tm-game-frame');
+            if (frame && frame.contentWindow) {
+                frame.contentWindow.postMessage({ type: 'instudy-auth', data: data }, '*');
+            }
+        } catch (_) { /* noop */ }
+    }
+
+    // Слушаем запросы авторизации от игры
+    window.addEventListener('message', function (e) {
+        if (e.data && e.data.type === 'request-instudy-auth') {
+            var authData = null;
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                    chrome.storage.local.get(['instudy_auth_data'], function (res) {
+                        if (res.instudy_auth_data) {
+                            sendAuthToGame(res.instudy_auth_data);
+                        }
+                    });
+                    return;
+                } else {
+                    var raw = localStorage.getItem('instudy_auth_data');
+                    if (raw) authData = JSON.parse(raw);
+                }
+            } catch (_) { }
+            if (authData) sendAuthToGame(authData);
+        }
+    });
+
+    /* -----------------------------------------------------------
+     *  Онлайн-индикаторы контактов в переписках
+     * ----------------------------------------------------------- */
+    var onlineContactsCache = [];
+    var contactOnlineTimer = null;
+    var contactOnlineObs = null;
+
+    function injectContactOnlineStyles() {
+        try {
+            if (document.getElementById('tm-contact-online-style')) return;
+            var style = document.createElement('style');
+            style.id = 'tm-contact-online-style';
+            style.textContent = '.tm-ext-status-dot { display:inline-block !important; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; flex-shrink:0; }';
+            document.head.appendChild(style);
+        } catch (_) { /* noop */ }
+    }
+
+    function updateContactOnlineStatus() {
+        try {
+            var contacts = document.querySelectorAll('#contact_cell .contact_block');
+            if (!contacts.length) return;
+            contacts.forEach(function (block) {
+                var uid = block.id && block.id.replace(/^u/, '');
+                if (!uid) return;
+                var isOnline = onlineContactsCache.some(function (u) {
+                    return u.instudy_user_id === uid;
+                });
+
+                // Удаляем невидимый нативный индикатор InStudy
+                var native = block.querySelector('.online, .offline');
+                if (native) native.remove();
+
+                // Ищем или создаём наш индикатор
+                var indicator = block.querySelector('.tm-ext-status-dot');
+                if (!indicator) {
+                    indicator = document.createElement('span');
+                    indicator.className = 'tm-ext-status-dot';
+                    var first = block.firstChild;
+                    if (first) block.insertBefore(indicator, first);
+                    else block.appendChild(indicator);
+                }
+
+                if (isOnline) {
+                    indicator.style.background = '#a78bfa';
+                    indicator.style.boxShadow = '0 0 6px rgba(167,139,250,0.6)';
+                    indicator.title = 'В сети (InStudy Mono)';
+                } else {
+                    indicator.style.background = '#6b7280';
+                    indicator.style.boxShadow = 'none';
+                    indicator.title = 'Не в сети';
+                }
+            });
+        } catch (_) { /* noop */ }
+    }
+
+    function fetchOnlineContacts() {
+        try {
+            var apiBase = 'https://instudy-clicker-api.b8517280.workers.dev';
+            fetch(apiBase + '/api/online', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.success && data.users) {
+                        onlineContactsCache = data.users;
+                        updateContactOnlineStatus();
+                    }
+                })
+                .catch(function () { });
+        } catch (_) { }
+    }
+
+    function initContactOnlineObserver() {
+        try {
+            if (contactOnlineObs) return; // уже инициализировано
+            injectContactOnlineStyles();
+            
+            function tryAttach() {
+                var cell = document.getElementById('contact_cell');
+                if (!cell) return false;
+                fetchOnlineContacts();
+                if (contactOnlineTimer) clearInterval(contactOnlineTimer);
+                contactOnlineTimer = setInterval(fetchOnlineContacts, 30000);
+                contactOnlineObs = new MutationObserver(function () {
+                    updateContactOnlineStatus();
+                });
+                contactOnlineObs.observe(cell, { childList: true, subtree: true });
+                return true;
+            }
+            
+            // Пробуем сразу
+            if (tryAttach()) return;
+            
+            // Если нет — ждём появления элемента
+            var waitId = setInterval(function () {
+                if (tryAttach()) {
+                    clearInterval(waitId);
+                }
+            }, 2000);
+            
+            // Страховка: остановить ожидание через 60 сек
+            setTimeout(function () { clearInterval(waitId); }, 60000);
+        } catch (_) { }
+    }
+
     onReady(() => {
         applyTheme(getCurrentTheme());
         disableColorTheme();
@@ -1156,6 +1398,8 @@
         injectScrollTop();
         watchNewMessages();
         inlineChatImages();
+        initAuth(); // <-- привязка аккаунта
+        initContactOnlineObserver(); // <-- онлайн-индикаторы контактов
 
         // MutationObserver для AJAX-вставок (debounce для производительности):
         try {
@@ -1174,6 +1418,7 @@
                 markMyMessages();
                 inlineChatImages();
                 ensureToolbarButtons();
+                if (!contactOnlineObs) initContactOnlineObserver();
             }
             const observer = new MutationObserver((mutations) => {
                 var hasNew = false;
