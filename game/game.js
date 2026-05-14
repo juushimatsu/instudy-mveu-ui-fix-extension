@@ -237,32 +237,64 @@
         }
     }
 
-    function renderUpgrades() {
+    /*
+     * Апгрейды рисуются один раз; на каждом тике обновляются только
+     * волатильные части (цена, счётчик, доступность). Полная перерисовка
+     * через innerHTML ломала :hover и съедала клики между mousedown/click.
+     */
+    var upgradeNodes = null;
+
+    function buildUpgradeNodes() {
         listEl.innerHTML = '';
+        upgradeNodes = {};
         UPGRADES.forEach(function (u) {
+            var item = document.createElement('div');
+            item.className = 'upgrade-item';
+            item.innerHTML =
+                '<div class="upgrade-icon"></div>' +
+                '<div class="upgrade-info">' +
+                    '<div class="upgrade-name"></div>' +
+                    '<div class="upgrade-desc"></div>' +
+                '</div>' +
+                '<div class="upgrade-count"></div>' +
+                '<button class="upgrade-buy" data-id="' + u.id + '">Купить</button>';
+
+            item.querySelector('.upgrade-icon').textContent = u.icon;
+            item.querySelector('.upgrade-name').textContent = u.name;
+
+            var btn = item.querySelector('.upgrade-buy');
+            btn.addEventListener('click', function () {
+                buyUpgrade(u.id);
+            });
+
+            listEl.appendChild(item);
+            upgradeNodes[u.id] = {
+                desc: item.querySelector('.upgrade-desc'),
+                count: item.querySelector('.upgrade-count'),
+                button: btn,
+                affordable: null
+            };
+        });
+    }
+
+    function renderUpgrades() {
+        if (!upgradeNodes) buildUpgradeNodes();
+
+        UPGRADES.forEach(function (u) {
+            var nodes = upgradeNodes[u.id];
             var count = state.upgrades[u.id] || 0;
             var cost = getUpgradeCost(u);
             var affordable = state.knowledge >= cost;
 
-            var item = document.createElement('div');
-            item.className = 'upgrade-item';
-            item.innerHTML =
-                '<div class="upgrade-icon">' + u.icon + '</div>' +
-                '<div class="upgrade-info">' +
-                    '<div class="upgrade-name">' + escapeHtml(u.name) + '</div>' +
-                    '<div class="upgrade-desc">' + escapeHtml(u.desc) + ' | Цена: ' + formatNumber(cost) + '</div>' +
-                '</div>' +
-                '<div class="upgrade-count">' + count + '</div>' +
-                '<button class="upgrade-buy ' + (affordable ? 'affordable' : '') + '" data-id="' + u.id + '" ' + (affordable ? '' : 'disabled') + '>' +
-                    'Купить' +
-                '</button>';
-            listEl.appendChild(item);
-        });
-
-        listEl.querySelectorAll('.upgrade-buy').forEach(function (b) {
-            b.addEventListener('click', function () {
-                buyUpgrade(b.dataset.id);
-            });
+            var newDesc = u.desc + ' | Цена: ' + formatNumber(cost);
+            if (nodes.desc.textContent !== newDesc) nodes.desc.textContent = newDesc;
+            var countStr = String(count);
+            if (nodes.count.textContent !== countStr) nodes.count.textContent = countStr;
+            if (nodes.affordable !== affordable) {
+                nodes.affordable = affordable;
+                nodes.button.disabled = !affordable;
+                nodes.button.classList.toggle('affordable', affordable);
+            }
         });
     }
 
@@ -555,13 +587,7 @@
                 if (window.ClickerAPI) {
                     window.ClickerAPI.getMe(function (err2, me) {
                         if (!err2 && me && me.success && me.user && me.user.score) {
-                            var s = me.user.score;
-                            state.knowledge = s.knowledge || 0;
-                            state.totalKnowledge = s.total_knowledge || 0;
-                            state.clickCount = s.click_count || 0;
-                            state.upgrades = s.upgrades || {};
-                            renderStats();
-                            renderUpgrades();
+                            mergeServerState(me.user.score);
                         }
                         startOnlineFeatures();
                     });
@@ -586,13 +612,7 @@
                         // Загружаем состояние с сервера (если есть) чтобы избежать 403
                         window.ClickerAPI.getMe(function (err2, me) {
                             if (!err2 && me && me.success && me.user && me.user.score) {
-                                var s = me.user.score;
-                                state.knowledge = s.knowledge || 0;
-                                state.totalKnowledge = s.total_knowledge || 0;
-                                state.clickCount = s.click_count || 0;
-                                state.upgrades = s.upgrades || {};
-                                renderStats();
-                                renderUpgrades();
+                                mergeServerState(me.user.score);
                             }
                             startOnlineFeatures();
                         });
@@ -611,12 +631,29 @@
         loadOnline();
         // Синхронизация каждые 30 сек
         syncTimer = setInterval(syncToServer, 30000);
-        // Heartbeat каждые 30 сек
-        heartbeatTimer = setInterval(sendHeartbeat, 30000);
+        // Heartbeat каждые 45 сек (TTL на сервере 180 сек — есть запас на throttling)
+        heartbeatTimer = setInterval(sendHeartbeat, 45000);
         // Обновление рейтинга каждые 60 сек
         leaderboardTimer = setInterval(loadLeaderboard, 60000);
         // Обновление онлайна каждые 30 сек
         onlineTimer = setInterval(loadOnline, 30000);
+
+        /*
+         * Когда вкладка скрыта, браузеры душат setInterval (Chrome — до 1 раза/мин),
+         * из-за чего heartbeat пропускается и пользователь "мигает" оффлайном.
+         * При возврате на вкладку немедленно отправляем heartbeat и обновляем
+         * списки, чтобы UI был актуальным.
+         */
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden && apiEnabled) {
+                sendHeartbeat();
+                loadOnline();
+                syncToServer();
+            }
+        });
+        window.addEventListener('focus', function () {
+            if (apiEnabled) sendHeartbeat();
+        });
     }
 
     function syncToServer() {
@@ -657,6 +694,32 @@
                 renderOnline();
             }
         });
+    }
+
+    /*
+     * Сервер хранит последнее синхронизированное состояние; локально мы могли
+     * успеть начислить оффлайн-доход или докликать с прошлого сохранения.
+     * Берём максимум по totalKnowledge — это монотонно растущая величина,
+     * по ней безопасно определять "более свежий" стейт. Нельзя просто
+     * перезаписывать локальный state серверным: иначе оффлайн-доход теряется.
+     */
+    function mergeServerState(serverScore) {
+        if (!serverScore) return;
+        var srvTotal = serverScore.total_knowledge || 0;
+        if (srvTotal > state.totalKnowledge) {
+            state.knowledge = serverScore.knowledge || 0;
+            state.totalKnowledge = srvTotal;
+            state.clickCount = Math.max(state.clickCount, serverScore.click_count || 0);
+            state.upgrades = serverScore.upgrades || state.upgrades;
+            // На сервере прогресса больше — оффлайн-доход уже учтён где-то ещё.
+            pendingOfflineIncome = 0;
+        } else {
+            // Локально прогресса больше: оставляем локальный стейт,
+            // только подтягиваем clickCount как максимум.
+            state.clickCount = Math.max(state.clickCount, serverScore.click_count || 0);
+        }
+        renderStats();
+        renderUpgrades();
     }
 
     function updateSyncStatus(text, isError) {

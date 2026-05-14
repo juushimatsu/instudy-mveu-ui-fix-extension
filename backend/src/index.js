@@ -17,8 +17,8 @@ const UPGRADES = [
 ];
 
 const CLICKS_PER_SEC_LIMIT = 18;        // макс. человеческий CPS
-const EVENT_BONUS_BUFFER = 500;         // запас на события (экзамен +50, лаба +50 и т.д.)
-const ONLINE_TTL_SECONDS = 120;         // 2 минуты = онлайн
+const EVENT_BONUS_BUFFER = 5000;        // запас на события (комбо экзамен+лаба+вирус, бонусы кликов и т.д.)
+const ONLINE_TTL_SECONDS = 180;         // 3 минуты = онлайн (запас на throttling фоновых вкладок)
 
 /* ──────────────────────────────
  *  CORS
