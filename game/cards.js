@@ -92,6 +92,22 @@
     var CARDS_BY_RARITY = { common: [], rare: [], epic: [], legendary: [] };
     CARDS.forEach(function (c) { CARDS_BY_RARITY[c.rarity].push(c); });
 
+    /* ID карт, эксклюзивных для premium-пака «Ночь перед сессией» */
+    var PREMIUM_EXCLUSIVE_IDS = [
+        'energydrink', 'pillow', 'cartridge', 'dormpass', 'slippers',
+        'laptop3pct', 'corvalol', 'nerdnotes', 'deanghost', 'goldauto'
+    ];
+    var PREMIUM_EXCLUSIVE_SET = {};
+    PREMIUM_EXCLUSIVE_IDS.forEach(function (id) { PREMIUM_EXCLUSIVE_SET[id] = true; });
+
+    /* Пулы по редкости без premium-эксклюзивов (для small/big паков) */
+    var BASE_CARDS_BY_RARITY = { common: [], rare: [], epic: [], legendary: [] };
+    CARDS.forEach(function (c) {
+        if (!PREMIUM_EXCLUSIVE_SET[c.id]) {
+            BASE_CARDS_BY_RARITY[c.rarity].push(c);
+        }
+    });
+
     /* ──────────────────────────────────────────────────────────
      *  РЕДКОСТЬ И ПАКИ
      * ────────────────────────────────────────────────────────── */
@@ -162,19 +178,21 @@
         return 'common';
     }
 
-    function pickCardOfRarity(rarity) {
-        var pool = CARDS_BY_RARITY[rarity];
-        if (!pool || !pool.length) pool = CARDS_BY_RARITY.common;
-        return pool[Math.floor(Math.random() * pool.length)];
+    function pickCardOfRarity(rarity, pool) {
+        var cards = pool[rarity];
+        if (!cards || !cards.length) cards = pool.common;
+        return cards[Math.floor(Math.random() * cards.length)];
     }
 
     function rollPack(packId) {
         var pack = PACKS[packId];
         if (!pack) return [];
+        // Premium-пак использует полный пул, остальные — только базовые карты
+        var pool = (packId === 'premium') ? CARDS_BY_RARITY : BASE_CARDS_BY_RARITY;
         var result = [];
         for (var i = 0; i < pack.size; i++) {
             var rarity = rollRarity(pack.drop);
-            result.push(pickCardOfRarity(rarity));
+            result.push(pickCardOfRarity(rarity, pool));
         }
         return result;
     }
