@@ -42,7 +42,7 @@
         Object.keys(SOUNDS).forEach(function (key) {
             if (key === 'click') return;
             var audio = new Audio(resolveUrl(SOUNDS[key].file));
-            audio.volume = 0.6;
+            audio.volume = key === 'paperRip' ? 0.8 : 0.35;
             audio.preload = 'auto';
             audioCache[key] = audio;
         });
