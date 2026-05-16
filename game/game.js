@@ -913,9 +913,22 @@
             window.addEventListener('beforeunload', saveGame);
             scheduleEvent();
             tryAuth(); // <-- онлайн-функции
+            if (window.ClickerSounds) window.ClickerSounds.preload();
             if (window.ClickerCardsUI && window.ClickerCardsUI.init) {
                 window.ClickerCardsUI.init();
             }
+            // Звук клика на все кнопки интерфейса, кроме кнопки кликера
+            document.addEventListener('click', function (e) {
+                var target = e.target;
+                if (!target) return;
+                var isButton = target.tagName === 'BUTTON' || target.classList.contains('upgrade-buy')
+                    || target.classList.contains('tm-game-tab-btn') || target.classList.contains('cc-tab')
+                    || target.classList.contains('cc-pack-buy') || target.classList.contains('cc-action-btn')
+                    || target.classList.contains('cc-dust-btn') || target.classList.contains('tm-panel-close');
+                if (isButton && target !== btnEl && !btnEl.contains(target)) {
+                    if (window.ClickerSounds) window.ClickerSounds.playClick();
+                }
+            });
         });
     }
 

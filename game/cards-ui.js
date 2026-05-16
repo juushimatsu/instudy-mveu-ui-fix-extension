@@ -406,6 +406,8 @@
 
         function tear() {
             hint.textContent = '';
+            // Звук разрыва (2.4 сек) — запускаем сразу при разрыве
+            if (window.ClickerSounds) window.ClickerSounds.playPaperRip();
             // Эффект разрыва: половинки разлетаются, fade-out.
             topHalf.style.transition = 'transform .55s cubic-bezier(.4,0,.2,1),opacity .55s ease';
             botHalf.style.transition = 'transform .55s cubic-bezier(.4,0,.2,1),opacity .55s ease';
@@ -475,6 +477,8 @@
                     flipped = true;
                     el.classList.add('flipped');
                     el.style.setProperty('--cc-glow', meta.glow);
+                    // Звук показа карты (2.583 сек)
+                    if (window.ClickerSounds) window.ClickerSounds.playLootReveal();
                     setTimeout(function () {
                         el.style.animation = 'ccGlow 1.6s ease-in-out infinite';
                     }, 550);
