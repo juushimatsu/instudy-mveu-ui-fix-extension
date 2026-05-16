@@ -16,8 +16,12 @@ CREATE TABLE IF NOT EXISTS scores (
     total_knowledge REAL DEFAULT 0,
     click_count INTEGER DEFAULT 0,
     upgrades TEXT DEFAULT '{}',
+    cards TEXT DEFAULT '{}',
     updated_at INTEGER DEFAULT (unixepoch())
 );
+
+-- Миграция для уже существующих БД (no-op если столбец уже есть)
+-- ALTER TABLE scores ADD COLUMN cards TEXT DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS score_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

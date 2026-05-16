@@ -36,12 +36,14 @@
         knowledge: 0,
         totalKnowledge: 0,
         clickCount: 0,
-        upgrades: {}
+        upgrades: {},
+        cards: {}
     };
     UPGRADES.forEach(function (u) { state.upgrades[u.id] = 0; });
 
     var lastSave = Date.now();
     var tickInterval = null;
+    var gameBlocked = false; // блокирует клик во время оверлеев (открытие пака и т.п.)
 
     /* ── События ── */
     var gameState = 'idle'; // idle | exam | lab | virus
@@ -158,6 +160,7 @@
                 totalKnowledge: state.totalKnowledge,
                 clickCount: state.clickCount,
                 upgrades: state.upgrades,
+                cards: state.cards,
                 savedAt: Date.now()
             };
             if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -191,6 +194,9 @@
                     Object.keys(data.upgrades).forEach(function (key) {
                         state.upgrades[key] = data.upgrades[key];
                     });
+                }
+                if (data.cards && typeof data.cards === 'object') {
+                    state.cards = data.cards;
                 }
                 if (offlineGain > 0) {
                     pendingOfflineIncome = offlineGain;
@@ -325,6 +331,7 @@
      *  КЛИК
      * ────────────────────────────────────────────────────────── */
     function onClick(e) {
+        if (gameBlocked) return; // оверлей открытия пака
         if (gameState !== 'idle') return; // нельзя кликать во время событий
         var val = getClickValue();
         state.knowledge += val;
@@ -718,8 +725,25 @@
             // только подтягиваем clickCount как максимум.
             state.clickCount = Math.max(state.clickCount, serverScore.click_count || 0);
         }
+        // Карты мерджим всегда покомпонентно: на сервере и локально могут быть
+        // разные коллекции (например, если несколько устройств). Берём максимум
+        // по каждому id, чтобы ничего не потерять.
+        if (serverScore.cards && typeof serverScore.cards === 'object') {
+            var localCards = state.cards || {};
+            var merged = {};
+            var allIds = {};
+            Object.keys(localCards).forEach(function (k) { allIds[k] = true; });
+            Object.keys(serverScore.cards).forEach(function (k) { allIds[k] = true; });
+            Object.keys(allIds).forEach(function (id) {
+                merged[id] = Math.max(localCards[id] || 0, serverScore.cards[id] || 0);
+            });
+            state.cards = merged;
+        }
         renderStats();
         renderUpgrades();
+        if (window.ClickerCardsUI && window.ClickerCardsUI.refresh) {
+            window.ClickerCardsUI.refresh();
+        }
     }
 
     function updateSyncStatus(text, isError) {
@@ -844,6 +868,40 @@
     }
 
     /* ──────────────────────────────────────────────────────────
+     *  МОСТ ДЛЯ CARDS-UI
+     * ────────────────────────────────────────────────────────── */
+    window.ClickerGame = {
+        formatNumber: formatNumber,
+        toast: showToast,
+        getKnowledge: function () { return state.knowledge; },
+        getCards: function () {
+            if (!state.cards) state.cards = {};
+            return state.cards;
+        },
+        spendKnowledge: function (amount) {
+            if (state.knowledge < amount) return false;
+            state.knowledge -= amount;
+            renderStats();
+            renderUpgrades();
+            return true;
+        },
+        addKnowledge: function (amount, opts) {
+            // opts.skipTotal — для компенсаций (конвертация дублей и т.п.),
+            // которые не должны влиять на totalKnowledge и не вызывать
+            // подозрений у серверного античита.
+            state.knowledge += amount;
+            if (!opts || !opts.skipTotal) {
+                state.totalKnowledge += amount;
+            }
+            renderStats();
+            renderUpgrades();
+        },
+        save: saveGame,
+        sync: function () { if (typeof syncToServer === 'function') syncToServer(); },
+        setBlocked: function (b) { gameBlocked = !!b; }
+    };
+
+    /* ──────────────────────────────────────────────────────────
      *  ИНИЦИАЛИЗАЦИЯ
      * ────────────────────────────────────────────────────────── */
     function init() {
@@ -855,6 +913,9 @@
             window.addEventListener('beforeunload', saveGame);
             scheduleEvent();
             tryAuth(); // <-- онлайн-функции
+            if (window.ClickerCardsUI && window.ClickerCardsUI.init) {
+                window.ClickerCardsUI.init();
+            }
         });
     }
 

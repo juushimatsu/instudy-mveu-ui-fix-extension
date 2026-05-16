@@ -94,6 +94,7 @@
                 totalKnowledge: state.totalKnowledge,
                 clickCount: state.clickCount,
                 upgrades: state.upgrades,
+                cards: state.cards || {},
                 offlineIncome: offlineIncome || 0,
                 timestamp: Date.now()
             }, function (err, data) {

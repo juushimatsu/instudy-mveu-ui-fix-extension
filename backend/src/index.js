@@ -57,6 +57,27 @@ function generateToken() {
 	return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/*
+ * Ленивая миграция: добавляет колонку scores.cards в существующих БД.
+ * Запускается один раз за инстанс воркера (флаг в global). Безопасна —
+ * ALTER TABLE с проверкой через PRAGMA. На свежих БД из schema.sql колонка
+ * уже создана и эта функция выполнит no-op.
+ */
+let cardsColumnReady = false;
+async function ensureCardsColumn(env) {
+	if (cardsColumnReady) return;
+	try {
+		const info = await env.DB.prepare("PRAGMA table_info(scores)").all();
+		const hasCards = (info.results || []).some(row => row.name === 'cards');
+		if (!hasCards) {
+			await env.DB.prepare("ALTER TABLE scores ADD COLUMN cards TEXT DEFAULT '{}'").run();
+		}
+		cardsColumnReady = true;
+	} catch (e) {
+		console.warn('[ensureCardsColumn]', e?.message || e);
+	}
+}
+
 function getUpgradeCost(upg, count) {
 	return Math.floor(upg.baseCost * Math.pow(1.15, count));
 }
@@ -179,8 +200,10 @@ async function handleMe(request, env) {
 	const token = request.headers.get('Authorization')?.replace('Bearer ', '');
 	if (!token) return errorResponse('Unauthorized', 401, request);
 
+	await ensureCardsColumn(env);
+
 	const user = await env.DB.prepare(
-		'SELECT u.id, u.instudy_user_id, u.username, u.created_at, s.knowledge, s.total_knowledge, s.click_count, s.upgrades, s.updated_at ' +
+		'SELECT u.id, u.instudy_user_id, u.username, u.created_at, s.knowledge, s.total_knowledge, s.click_count, s.upgrades, s.cards, s.updated_at ' +
 		'FROM users u LEFT JOIN scores s ON s.user_id = u.id WHERE u.token = ?'
 	).bind(token).first();
 
@@ -198,6 +221,7 @@ async function handleMe(request, env) {
 				total_knowledge: user.total_knowledge || 0,
 				click_count: user.click_count || 0,
 				upgrades: user.upgrades ? JSON.parse(user.upgrades) : {},
+				cards: user.cards ? JSON.parse(user.cards) : {},
 				updated_at: user.updated_at || 0
 			}
 		}
@@ -211,8 +235,10 @@ async function handleSync(request, env) {
 	const token = request.headers.get('Authorization')?.replace('Bearer ', '');
 	if (!token) return errorResponse('Unauthorized', 401, request);
 
+	await ensureCardsColumn(env);
+
 	const body = await request.json().catch(() => ({}));
-	const { knowledge, totalKnowledge, clickCount, upgrades, offlineIncome } = body;
+	const { knowledge, totalKnowledge, clickCount, upgrades, offlineIncome, cards } = body;
 
 	if (typeof knowledge !== 'number' || typeof totalKnowledge !== 'number' || typeof clickCount !== 'number') {
 		return errorResponse('Invalid score data', 400, request);
@@ -257,14 +283,15 @@ async function handleSync(request, env) {
 	}
 
 	// Upsert score
+	const cardsJson = JSON.stringify(cards && typeof cards === 'object' ? cards : {});
 	if (prev) {
 		await env.DB.prepare(
-			'UPDATE scores SET knowledge=?, total_knowledge=?, click_count=?, upgrades=?, updated_at=? WHERE user_id=?'
-		).bind(knowledge, totalKnowledge, clickCount, JSON.stringify(upgrades || {}), now, user.id).run();
+			'UPDATE scores SET knowledge=?, total_knowledge=?, click_count=?, upgrades=?, cards=?, updated_at=? WHERE user_id=?'
+		).bind(knowledge, totalKnowledge, clickCount, JSON.stringify(upgrades || {}), cardsJson, now, user.id).run();
 	} else {
 		await env.DB.prepare(
-			'INSERT INTO scores (user_id, knowledge, total_knowledge, click_count, upgrades, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-		).bind(user.id, knowledge, totalKnowledge, clickCount, JSON.stringify(upgrades || {}), now).run();
+			'INSERT INTO scores (user_id, knowledge, total_knowledge, click_count, upgrades, cards, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+		).bind(user.id, knowledge, totalKnowledge, clickCount, JSON.stringify(upgrades || {}), cardsJson, now).run();
 	}
 
 	// Обновляем last_sync_at
