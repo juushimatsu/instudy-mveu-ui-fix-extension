@@ -1384,6 +1384,38 @@
         } catch (_) { }
     }
 
+    /* -----------------------------------------------------------
+     *  Мессенджер — двухколоночный layout (JS-помощник)
+     *  Добавляет класс .tm-chat-active на #sub-content когда
+     *  #chat_window виден, чтобы CSS мог включить flex-layout
+     *  без ненадёжного :has().
+     * ----------------------------------------------------------- */
+    function setupMessagingLayout() {
+        try {
+            var chatWindow = document.getElementById('chat_window');
+            var subContent = document.getElementById('sub-content');
+            if (!chatWindow || !subContent) return;
+
+            function update() {
+                var visible = chatWindow.style.display && chatWindow.style.display !== 'none';
+                subContent.classList.toggle('tm-chat-active', visible);
+                // Автоскролл к последнему сообщению при открытии чата
+                if (visible) {
+                    setTimeout(function () {
+                        var chatMsg = document.getElementById('chat_msg');
+                        if (chatMsg) chatMsg.scrollTop = chatMsg.scrollHeight;
+                    }, 100);
+                }
+            }
+
+            update();
+
+            // Следим за изменением style на #chat_window (jQuery .show()/.hide())
+            var obs = new MutationObserver(update);
+            obs.observe(chatWindow, { attributes: true, attributeFilter: ['style'] });
+        } catch (_) { /* noop */ }
+    }
+
     onReady(() => {
         applyTheme(getCurrentTheme());
         disableColorTheme();
@@ -1392,6 +1424,7 @@
         fixBrokenAvatars(document);
         virtualGulist();
         markMyMessages();
+        setupMessagingLayout();
         ensureToolbarButtons();
         injectGameMenuItem();
         applyWeather(getCurrentWeather());
