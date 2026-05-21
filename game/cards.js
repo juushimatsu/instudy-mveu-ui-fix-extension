@@ -18,70 +18,70 @@
      * ────────────────────────────────────────────────────────── */
     var CARDS = [
         // Common (7)
-        { id: 'gradebook',  rarity: 'common', name: 'Зачётная книжка',  file: 'Зачётная книжка.png',
+        { id: 'gradebook',  rarity: 'common', name: 'Зачётная книжка',  file: 'Зачётная книжка.jpg',
           desc: 'Потрёпанная синяя книжка с золотым тиснением. Печать деканата в углу.' },
-        { id: 'pen',        rarity: 'common', name: 'Шариковая ручка',  file: 'Шариковая ручка BIC.png',
+        { id: 'pen',        rarity: 'common', name: 'Шариковая ручка',  file: 'Шариковая ручка BIC.jpg',
           desc: 'Синяя BIC с погрызенным колпачком. Чернила на исходе.' },
-        { id: 'notebook',   rarity: 'common', name: 'Общая тетрадь',    file: 'Общая тетрадь.png',
+        { id: 'notebook',   rarity: 'common', name: 'Общая тетрадь',    file: 'Общая тетрадь.jpg',
           desc: '96 листов в клетку. Обложка в разводах от кофе.' },
-        { id: 'spoon',      rarity: 'common', name: 'Столовская ложка', file: 'Столовская ложка.png',
+        { id: 'spoon',      rarity: 'common', name: 'Столовская ложка', file: 'Столовская ложка.jpg',
           desc: 'Алюминиевая, погнутая. На черенке выцарапано «не брать».' },
-        { id: 'schedule',   rarity: 'common', name: 'Расписание пар',   file: 'Расписание пар.png',
+        { id: 'schedule',   rarity: 'common', name: 'Расписание пар',   file: 'Расписание пар.jpg',
           desc: 'Распечатано на принтере с бледным картриджем. Одна пара зачёркнута.' },
-        { id: 'travelcard', rarity: 'common', name: 'Проездной',        file: 'Проездной.png',
+        { id: 'travelcard', rarity: 'common', name: 'Проездной',        file: 'Проездной.jpg',
           desc: 'Пластик с фото в 8 утра. Срок до конца семестра.' },
-        { id: 'doshirak',   rarity: 'common', name: 'Пакет доширака',   file: 'Пакет доширака.png',
+        { id: 'doshirak',   rarity: 'common', name: 'Пакет доширака',   file: 'Пакет доширака.jpg',
           desc: 'Курица. На обороте написано «ужин».' },
 
         // Rare (6)
-        { id: 'cheatsheet', rarity: 'rare', name: 'Шпаргалка-гармошка', file: 'Шпаргалка-гармошка.png',
+        { id: 'cheatsheet', rarity: 'rare', name: 'Шпаргалка-гармошка', file: 'Шпаргалка-гармошка.jpg',
           desc: 'Гармошка из бумаги с микроскопическим почерком. Помещается в кулак.' },
-        { id: 'mug',        rarity: 'rare', name: 'Кружка с кофе',      file: 'Кружка с кофе.png',
+        { id: 'mug',        rarity: 'rare', name: 'Кружка с кофе',      file: 'Кружка с кофе.jpg',
           desc: '«Лучший студен» (буква «т» стёрлась). На дне — гуща в форме знака вопроса.' },
-        { id: 'flashdrive', rarity: 'rare', name: 'Флешка 4GB',         file: 'Флешка 4GB.png',
+        { id: 'flashdrive', rarity: 'rare', name: 'Флешка 4GB',         file: 'Флешка 4GB.jpg',
           desc: 'LEGO-кирпичик. Наклейка «КУРСОВАЯ ФИНАЛ ФИНАЛ2 СДАТЬ».' },
-        { id: 'mathbook',   rarity: 'rare', name: 'Учебник по математике', file: 'Учебник по высшей математике.png',
+        { id: 'mathbook',   rarity: 'rare', name: 'Учебник по математике', file: 'Учебник по высшей математике.jpg',
           desc: 'Алгебра и анализ. Закладки из обёрток от конфет.' },
-        { id: 'studentid',  rarity: 'rare', name: 'Студенческий билет', file: 'Студенческий билет.png',
+        { id: 'studentid',  rarity: 'rare', name: 'Студенческий билет', file: 'Студенческий билет.jpg',
           desc: 'Красная книжечка. На фото — ещё оптимист.' },
-        { id: 'alarm',      rarity: 'rare', name: 'Будильник',          file: 'Будильник.png',
+        { id: 'alarm',      rarity: 'rare', name: 'Будильник',          file: 'Будильник.jpg',
           desc: '6:30 утра. Под ним ещё три на 6:31, 6:32, 6:33.' },
 
         // Epic (1)
-        { id: 'professor',  rarity: 'epic', name: 'Преподаватель Строгов', file: 'Преподаватель Строгов.png',
+        { id: 'professor',  rarity: 'epic', name: 'Преподаватель Строгов', file: 'Преподаватель Строгов.jpg',
           desc: 'Твидовый пиджак, кожаные заплатки. Смотрит поверх очков.' },
 
         // Legendary (1)
-        { id: 'session',    rarity: 'legendary', name: 'Зачётная сессия', file: 'Зачётная сессия.png',
+        { id: 'session',    rarity: 'legendary', name: 'Зачётная сессия', file: 'Зачётная сессия.jpg',
           desc: 'Бесконечная очередь. Часы показывают 7. Лампы мигают.' },
 
         /* ── Пак «Ночь перед сессией» ── */
         // Common (5)
-        { id: 'energydrink', rarity: 'common', name: 'Энергетик «Не спи»', file: 'Энергетик «Не спи».png',
+        { id: 'energydrink', rarity: 'common', name: 'Энергетик «Не спи»', file: 'Энергетик «Не спи».jpg',
           desc: 'Мятая банка кислотно-зелёного цвета. Часы за ней — 3:47 ночи.' },
-        { id: 'pillow',      rarity: 'common', name: 'Подушка на парте',    file: 'Подушка на парте.png',
+        { id: 'pillow',      rarity: 'common', name: 'Подушка на парте',    file: 'Подушка на парте.jpg',
           desc: 'Дорожная подушка-подкова на парте. На учебнике — след от щеки.' },
-        { id: 'cartridge',   rarity: 'common', name: 'Пустой картридж принтера', file: 'Пустой картридж принтера.png',
+        { id: 'cartridge',   rarity: 'common', name: 'Пустой картридж принтера', file: 'Пустой картридж принтера.jpg',
           desc: 'Заправлен 5 раз. Последние страницы курсовой — призраки букв.' },
-        { id: 'dormpass',    rarity: 'common', name: 'Просроченный пропуск в общагу', file: 'Просроченный пропуск в общагу.png',
+        { id: 'dormpass',    rarity: 'common', name: 'Просроченный пропуск в общагу', file: 'Просроченный пропуск в общагу.jpg',
           desc: 'Фото в капюшоне. На обороте: «пускай, я свой».' },
-        { id: 'slippers',    rarity: 'common', name: 'Тапки-шлёпки',       file: 'Тапки-шлёпки.png',
+        { id: 'slippers',    rarity: 'common', name: 'Тапки-шлёпки',       file: 'Тапки-шлёпки.jpg',
           desc: 'Один синий, другой чёрный. На подошве — расписание.' },
 
         // Rare (3)
-        { id: 'laptop3pct',  rarity: 'rare', name: 'Ноутбук с 3% батареи', file: 'Ноутбук с 3% батареи.png',
+        { id: 'laptop3pct',  rarity: 'rare', name: 'Ноутбук с 3% батареи', file: 'Ноутбук с 3_ батареи.jpg',
           desc: 'Курсовая на 47 странице. Зарядка не дотягивается до розетки.' },
-        { id: 'corvalol',    rarity: 'rare', name: 'Бутылка корвалола',     file: 'Бутылка корвалола.png',
+        { id: 'corvalol',    rarity: 'rare', name: 'Бутылка корвалола',     file: 'Бутылка корвалола.jpg',
           desc: 'Стоит на зачётке. Рядом — смятый билет №13.' },
-        { id: 'nerdnotes',   rarity: 'rare', name: 'Конспект отличницы',    file: 'Конспект отличницы.png',
+        { id: 'nerdnotes',   rarity: 'rare', name: 'Конспект отличницы',    file: 'Конспект отличницы.jpg',
           desc: '«НЕ ДАВАТЬ НИКОМУ» — зачёркнуто. Список из 12 имён.' },
 
         // Epic (1)
-        { id: 'deanghost',   rarity: 'epic', name: 'Призрак Деканата',      file: 'Призрак Деканата.png',
+        { id: 'deanghost',   rarity: 'epic', name: 'Призрак Деканата',      file: 'Призрак Деканата.jpg',
           desc: 'Полупрозрачная фигура в мантии. В руке — список отчисленных.' },
 
         // Legendary (1)
-        { id: 'goldauto',    rarity: 'legendary', name: 'Золотой автомат',   file: 'Золотой автомат.png',
+        { id: 'goldauto',    rarity: 'legendary', name: 'Золотой автомат',   file: 'Золотой автомат.jpg',
           desc: 'Все «отлично» золотыми чернилами. Подпись ректора. Корона.' }
     ];
 
