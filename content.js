@@ -1,6 +1,28 @@
 (function () {
     'use strict';
 
+    /* -----------------------------------------------------------
+     *  Глобальный выключатель расширения.
+     *  Флаг хранится в localStorage('tm-disabled') = '1'.
+     *  Базовый styles.css подключается отсюда (а не из манифеста),
+     *  чтобы выключатель мог его убрать вместе со всеми инъекциями.
+     * ----------------------------------------------------------- */
+    var TM_DISABLED = (function () {
+        try { return localStorage.getItem('tm-disabled') === '1'; } catch (_) { return false; }
+    })();
+
+    (function injectBaseStyles() {
+        if (TM_DISABLED) return;
+        try {
+            if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
+            var baseLink = document.createElement('link');
+            baseLink.rel = 'stylesheet';
+            baseLink.id = 'tm-base-css';
+            baseLink.href = chrome.runtime.getURL('styles.css');
+            (document.head || document.documentElement).appendChild(baseLink);
+        } catch (_) { /* noop */ }
+    })();
+
     function injectFonts() {
         try {
             const link = document.createElement('link');
@@ -9,7 +31,7 @@
             (document.head || document.documentElement).appendChild(link);
         } catch (_) { /* noop */ }
     }
-    injectFonts();
+    if (!TM_DISABLED) injectFonts();
 
     /* ----------------------------------------------------------- */
     /*  Инъекция стилей: резервный путь (основной CSS в styles.css)  */
@@ -1034,6 +1056,7 @@
 
     // Применяем сохранённую тему как можно раньше (до DOMContentLoaded)
     (function earlyTheme() {
+        if (TM_DISABLED) return;
         const t = getCurrentTheme();
         document.documentElement.setAttribute('data-theme', t);
         if (t === 'dark') {
@@ -1068,6 +1091,26 @@
 
             // Вставляем в конец меню или после последнего пункта
             menu.appendChild(li);
+
+            // Ссылки расширения в конце бокового меню
+            (function addExtLinks() {
+                var repoUrl = 'https://github.com/juushimatsu/instudy-mveu-ui-fix-extension';
+                function addLink(id, href, icon, label) {
+                    if (document.getElementById(id)) return;
+                    var lli = document.createElement('li');
+                    lli.id = id;
+                    lli.className = 'tm-ext-link';
+                    var aa = document.createElement('a');
+                    aa.href = href;
+                    aa.target = '_blank';
+                    aa.rel = 'noopener noreferrer';
+                    aa.innerHTML = '<span class="menu_icon">' + icon + '</span><b>' + label + '</b>';
+                    lli.appendChild(aa);
+                    menu.appendChild(lli);
+                }
+                addLink('tm-github-menu-item', repoUrl, '\u2B50', 'GitHub расширения');
+                addLink('tm-issue-menu-item', repoUrl + '/issues', '\uD83D\uDC1E', 'Сообщить об ошибке');
+            })();
         } catch (_) { /* noop */ }
     }
 
@@ -1417,6 +1460,7 @@
     }
 
     onReady(() => {
+        if (TM_DISABLED) return;
         applyTheme(getCurrentTheme());
         disableColorTheme();
         freeMenuFromSlimScroll();
@@ -1504,6 +1548,14 @@
                     case 'setDensity':
                         if (request.value) applyDensity(request.value);
                         sendResponse({ density: localStorage.getItem('tm-density') || 'normal' });
+                        break;
+                    case 'getDisabled':
+                        sendResponse({ disabled: TM_DISABLED });
+                        break;
+                    case 'setDisabled':
+                        try { localStorage.setItem('tm-disabled', request.value ? '1' : '0'); } catch (_) {}
+                        sendResponse({ disabled: !!request.value });
+                        try { location.reload(); } catch (_) {}
                         break;
                 }
             });

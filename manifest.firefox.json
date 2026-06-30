@@ -1,14 +1,13 @@
 {
   "manifest_version": 2,
   "name": "InStudy Mono UI",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Тёмная монохромная тема для портала disto.mveu.ru (InStudy)",
   "permissions": ["storage", "*://disto.mveu.ru/*"],
   "content_scripts": [
     {
       "matches": ["*://disto.mveu.ru/*"],
       "js": ["lib/jszip.min.js", "lib/fflate.umd.min.js", "content.js"],
-      "css": ["styles.css"],
       "run_at": "document_start",
       "all_frames": false
     }
@@ -26,7 +25,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "web_accessible_resources": ["game/*", "icons/*", "cards/*", "sounds/*"],
+  "web_accessible_resources": ["game/*", "icons/*", "cards/*", "sounds/*", "styles.css"],
   "browser_specific_settings": {
     "gecko": {
       "id": "{ceea37ac-9100-4ef2-9092-87117ddba6cd}",

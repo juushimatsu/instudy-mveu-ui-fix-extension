@@ -109,5 +109,27 @@
         });
     });
 
+    // Глобальный выключатель стилей расширения
+    var toggleBtn = document.getElementById('toggle-disabled');
+    function applyDisabledUI(disabled) {
+        if (!toggleBtn) return;
+        toggleBtn.textContent = disabled ? 'Включить стили расширения' : 'Отключить стили расширения';
+        toggleBtn.classList.toggle('active', !!disabled);
+    }
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            sendToContent('getDisabled', null, function (cur) {
+                var next = !(cur && cur.disabled);
+                sendToContent('setDisabled', next, function () {
+                    applyDisabledUI(next);
+                    setStatus(next ? 'Стили отключены — перезагрузка…' : 'Стили включены — перезагрузка…');
+                });
+            });
+        });
+        sendToContent('getDisabled', null, function (r) {
+            applyDisabledUI(!!(r && r.disabled));
+        });
+    }
+
     refreshState();
 })();
